@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	typePrepare = `prepare`
+	typeAccept  = `accept`
+)
+
 type Leader struct {
 	id       int
 	prepared struct {
@@ -53,16 +58,23 @@ func (l *Leader) newProposal(val string) domain.Proposal {
 	return domain.Proposal{PID: pId, Val: val}
 }
 
-func (l *Leader) sendPrepare(prop domain.Proposal) []*http.Response {
+func (l *Leader) send(typ string, prop domain.Proposal) []domain.AcceptorResponse {
 	data, err := json.Marshal(prop)
 	if err != nil {
 		// err
 	}
 
-	var resList []*http.Response
+	var endpoint string
+	if typ == typePrepare {
+		endpoint = domain.PrepareEndpoint
+	} else {
+		endpoint = domain.AcceptEndpoint
+	}
+
+	var resList []domain.AcceptorResponse
 	for _, acceptor := range l.leaders {
 		// todo do this in parallel
-		req, err := http.NewRequest(http.MethodPost, `http://`+acceptor+domain.PrepareEndpoint, bytes.NewBuffer(data))
+		req, err := http.NewRequest(http.MethodPost, `http://`+acceptor+endpoint, bytes.NewBuffer(data))
 		if err != nil {
 			// err
 		}
@@ -72,10 +84,60 @@ func (l *Leader) sendPrepare(prop domain.Proposal) []*http.Response {
 		if err != nil {
 			// err
 		}
-		resList = append(resList, res)
+		defer res.Body.Close() // todo close in each return
+
+		resData, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			// err
+		}
+
+		var response domain.AcceptorResponse
+		err = json.Unmarshal(resData, &response)
+		if err != nil {
+			// err
+		}
+		resList = append(resList, response)
 	}
 
 	return resList
+}
+
+func (l *Leader) validatePromises(resList []domain.AcceptorResponse) (accepted, rejected int, retry bool) {
+	accepted, rejected = 0, 0
+	for _, promise := range resList {
+		if promise.PrvAccept.Exists {
+			// todo close all res bodies in the outer func
+			if promise.PrvAccept.ID >= promise.PID {
+				return accepted, rejected, false
+			}
+			rejected++
+			continue
+		}
+
+		if promise.PrvPromise.Exists {
+			if promise.PrvPromise.ID >= promise.PID {
+				return accepted, rejected, false
+			}
+			rejected++
+			continue
+		}
+		accepted++
+	}
+
+	return accepted, rejected, true
+}
+
+func (l *Leader) validateAccepts(resList []domain.AcceptorResponse) (accepted, rejected int) {
+	accepted, rejected = 0, 0
+	for _, accept := range resList {
+		if accept.Accepted {
+			accepted++
+			continue
+		}
+		rejected++
+	}
+
+	return accepted, rejected
 }
 
 func (l *Leader) HandlePrepare() {
@@ -88,34 +150,13 @@ func (l *Leader) HandlePrepare() {
 	// if not, return promise(p_id)
 }
 
-func (l *Leader) validatePromises(resList []*http.Response) bool {
-	// check if res can be passed without closing
-	for _, res := range resList {
-		data, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			// err
-		}
-
-		var promise domain.Promise
-		err = json.Unmarshal(data, &promise)
-		if err != nil {
-			// err
-		}
-
-		if !promise.Success {
-			// todo close all res bodies in the outer func
-			return false
-		}
-	}
-
-	return true
-}
-
-func (l *Leader) sendAccept() {
-
-}
-
 func (l *Leader) HandleAccept() {
 	// if p_id > accepted_id, store accepted(p_id, val) and return response accept()
 	// if not, reply negative response
+}
+
+func (l *Leader) closeRes(resList []*http.Response) {
+	for _, res := range resList {
+		res.Body.Close()
+	}
 }

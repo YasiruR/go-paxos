@@ -1,10 +1,17 @@
 package domain
 
-type Promise struct {
-	PID      int
-	Success  bool
-	Accepted struct {
-		ID  int
-		Val string
-	}
+type AcceptorResponse struct {
+	PID        int `json:"pid"`
+	PrvPromise struct {
+		Exists bool   `json:"exists"`
+		ID     int    `json:"id"`
+		Val    string `json:"val"`
+	} `json:"prv_promise"`
+	PrvAccept struct {
+		Exists bool   `json:"exists"`
+		ID     int    `json:"id"`
+		Val    string `json:"val"`
+	} `json:"prv_accept"`
+
+	Accepted bool `json:"accepted"`
 }

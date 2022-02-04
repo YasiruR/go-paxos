@@ -19,7 +19,8 @@ func Init() {
 	r := mux.NewRouter()
 	r.HandleFunc(`/replica`, s.handleRequest).Methods(http.MethodPost)
 	r.HandleFunc(`/leader/request`, s.handleLeaderRequest).Methods(http.MethodPost)
-	r.HandleFunc(domain.PrepareEndpoint, handleProposal).Methods(http.MethodPost)
+	r.HandleFunc(domain.PrepareEndpoint, s.handlePrepare).Methods(http.MethodPost)
+	r.HandleFunc(domain.AcceptEndpoint, s.handleAccept).Methods(http.MethodPost)
 }
 
 // endpoint for replica to receive request
@@ -50,6 +51,11 @@ func (s *Server) handleLeaderRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // endpoint for leader to receive proposal
-func handleProposal(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// endpoint for leader to receive accept
+func (s *Server) handleAccept(w http.ResponseWriter, r *http.Request) {
 
 }
