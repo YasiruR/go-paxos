@@ -1,7 +1,6 @@
 package roles
 
 import (
-	"github.com/go-paxos/domain"
 	"net/http"
 )
 
@@ -17,8 +16,16 @@ func NewReplica() *Replica {
 }
 
 // HandleRequest forwards the request received from a client to a leader
-func (r *Replica) HandleRequest(req domain.Request) {
+func (r *Replica) HandleRequest(val string) {
+	// prepare request
 
+	// forward to a leader
+
+	// when response returned,
+	// output slot_id, val when response is received (or all at the end)
+	// if not success, retry with incrementing slot id
+
+	// return when the requested val is chosen
 }
 
 func (r *Replica) send() {
