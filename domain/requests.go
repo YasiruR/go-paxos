@@ -6,6 +6,6 @@ type Request struct {
 }
 
 type Proposal struct {
-	PID int    `json:"pid"`
+	ID  int    `json:"id"`
 	Val string `json:"val"`
 }

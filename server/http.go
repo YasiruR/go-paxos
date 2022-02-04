@@ -17,14 +17,16 @@ type Server struct {
 func Init() {
 	s := &Server{}
 	r := mux.NewRouter()
-	r.HandleFunc(`/replica`, s.handleRequest).Methods(http.MethodPost)
-	r.HandleFunc(`/leader/request`, s.handleLeaderRequest).Methods(http.MethodPost)
+	r.HandleFunc(domain.RequestReplicaEndpoint, s.handleClientRequest).Methods(http.MethodPost)
+	r.HandleFunc(domain.UpdateReplicaEndpoint, s.handleUpdateReplica).Methods(http.MethodPost)
+
+	r.HandleFunc(`/leader/request`, s.handleReplicaRequest).Methods(http.MethodPost)
 	r.HandleFunc(domain.PrepareEndpoint, s.handlePrepare).Methods(http.MethodPost)
 	r.HandleFunc(domain.AcceptEndpoint, s.handleAccept).Methods(http.MethodPost)
 }
 
 // endpoint for replica to receive request
-func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -33,8 +35,12 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (s *Server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
+
+}
+
 // endpoint for leader to receive request
-func (s *Server) handleLeaderRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {

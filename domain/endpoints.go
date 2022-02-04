@@ -1,6 +1,8 @@
 package domain
 
 const (
-	PrepareEndpoint = `/leader/prepare`
-	AcceptEndpoint  = `/leader/accept`
+	RequestReplicaEndpoint = `/replica/request`
+	UpdateReplicaEndpoint  = `/replica/update`
+	PrepareEndpoint        = `/leader/prepare`
+	AcceptEndpoint         = `/leader/accept`
 )

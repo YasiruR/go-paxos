@@ -1,6 +1,11 @@
 package domain
 
-type AcceptorResponse struct {
+type Decision struct {
+	SlotID int    `json:"slot_id"`
+	Val    string `json:"val"`
+}
+
+type Acceptance struct {
 	PID        int `json:"pid"`
 	PrvPromise struct {
 		Exists bool   `json:"exists"`
