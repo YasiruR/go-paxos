@@ -7,6 +7,7 @@ type Request struct {
 }
 
 type Proposal struct {
-	ID  int    `json:"id"`
-	Val string `json:"val"`
+	ID     int    `json:"id"`
+	SlotID int    `json:"slot_id"`
+	Val    string `json:"val"`
 }

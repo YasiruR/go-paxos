@@ -11,6 +11,7 @@ import (
 	"sync"
 )
 
+// todo add all errs to one file
 const (
 	errNoLeader    = `no leader found in the replica`
 	errInvalidSlot = `received a decision for an invalid slot`

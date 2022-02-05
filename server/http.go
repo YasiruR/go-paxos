@@ -129,7 +129,12 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	promise := s.leader.HandlePrepare(prop)
+	promise, err := s.leader.HandlePrepare(prop)
+	if err != nil {
+		s.logger.ErrorContext(ctx, err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(&promise)
 	if err != nil {
@@ -156,7 +161,12 @@ func (s *Server) handleAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accept := s.leader.HandleAccept(prop)
+	accept, err := s.leader.HandleAccept(prop)
+	if err != nil {
+		s.logger.ErrorContext(ctx, err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(&accept)
 	if err != nil {
