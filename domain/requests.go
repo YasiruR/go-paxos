@@ -1,8 +1,9 @@
 package domain
 
 type Request struct {
-	SlotID int    `json:"slot_id"`
-	Val    string `json:"value"`
+	Replica string `json:"replica"`
+	SlotID  int    `json:"slot_id"`
+	Val     string `json:"value"`
 }
 
 type Proposal struct {

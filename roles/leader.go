@@ -19,6 +19,7 @@ const (
 
 type Leader struct {
 	id       int
+	lastSlot int
 	promised struct {
 		id  int
 		val string
@@ -34,10 +35,12 @@ type Leader struct {
 }
 
 func NewLeader() *Leader {
-	return &Leader{}
+	return &Leader{
+		lastSlot: -1,
+	}
 }
 
-func (l *Leader) Propose(req domain.Request) (success bool) {
+func (l *Leader) Propose(req domain.Request) (success bool, err error) {
 	// create a proposal with p_id=timestamp,leader id
 	// send it to other leaders
 	// wait for majority responses
@@ -49,6 +52,11 @@ func (l *Leader) Propose(req domain.Request) (success bool) {
 	// wait for majority responses
 	// if all accept, return val to all replicas
 
+	if l.lastSlot+1 != req.SlotID {
+		// err
+		return false, err
+	}
+
 	var dec domain.Decision
 	prop := l.newProposal(req.Val)
 	accepted, rejected, valid := l.validatePromises(l.send(typePrepare, prop))
@@ -58,22 +66,27 @@ func (l *Leader) Propose(req domain.Request) (success bool) {
 			if accepted > rejected {
 				dec.SlotID = req.SlotID
 				dec.Val = req.Val
-				l.broadcastDecision(dec)
-				return true
+				l.lastSlot++
+				l.broadcastDecision(dec, req.Replica)
+				return true, nil
 			}
 		}
 	}
 
-	return false
+	return false, nil
 }
 
-func (l *Leader) broadcastDecision(dec domain.Decision) {
+func (l *Leader) broadcastDecision(dec domain.Decision, requester string) {
 	data, err := json.Marshal(dec)
 	if err != nil {
 		// err
 	}
 
 	for _, replica := range l.replicas {
+		if replica == requester {
+			continue
+		}
+
 		// todo can do in parallel
 		req, err := http.NewRequest(http.MethodPost, `http://`+replica+domain.UpdateReplicaEndpoint, bytes.NewBuffer(data))
 		if err != nil {
@@ -235,6 +248,7 @@ func (l *Leader) HandleAccept(p domain.Proposal) domain.Acceptance {
 
 	l.accepted.id = p.ID
 	l.accepted.val = p.Val
+	l.lastSlot++
 	res.Accepted = true
 
 	return res
