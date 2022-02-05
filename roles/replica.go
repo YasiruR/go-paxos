@@ -3,9 +3,17 @@ package roles
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/go-paxos/domain"
+	"github.com/go-paxos/logger"
 	"net/http"
 	"sync"
+)
+
+const (
+	errNoLeader    = `no leader found in the replica`
+	errInvalidSlot = `received a decision for an invalid slot`
 )
 
 type Replica struct {
@@ -21,27 +29,17 @@ func NewReplica() *Replica {
 	return &Replica{}
 }
 
-// HandleRequest forwards the request received from a client to a leader
+// HandleRequest builds a request from the client value and forwards the request received to a leader
 func (r *Replica) HandleRequest(val string) error {
-	// prepare request
-
-	// forward to a leader
-
-	// when response returned,
-	// output slot_id, val when response is received (or all at the end)
-	// if not success, retry with incrementing slot id
-
-	// return when the requested val is chosen
-
 	req := r.buildRequest(val)
 	for {
 		ok, err := r.send(req)
 		if err != nil {
-			// err
+			return logger.ErrorWithLine(err)
 		}
 
 		if ok {
-			break
+			return nil
 		}
 
 		r.lock.Lock()
@@ -52,10 +50,9 @@ func (r *Replica) HandleRequest(val string) error {
 		}
 		r.lock.Unlock()
 	}
-
-	return nil
 }
 
+// buildRequest builds the request from the client value
 func (r *Replica) buildRequest(val string) domain.Request {
 	return domain.Request{
 		Replica: r.hostname,
@@ -64,34 +61,35 @@ func (r *Replica) buildRequest(val string) domain.Request {
 	}
 }
 
-func (r *Replica) send(replicaReq domain.Request) (bool, error) {
+// Sends the request to first leader found in the leader list. If the list is empty, an error is returned with success as false
+func (r *Replica) send(replicaReq domain.Request) (ok bool, err error) {
 	if len(r.leaders) == 0 {
-		// err
-		//return false, err
+		return false, logger.ErrorWithLine(errors.New(errNoLeader))
 	}
 
 	data, err := json.Marshal(replicaReq)
 	if err != nil {
-		// err
+		return false, logger.ErrorWithLine(err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, `http://`+r.leaders[0]+domain.RequestLeaderEndpoint, bytes.NewBuffer(data))
 	if err != nil {
-		// err
+		return false, logger.ErrorWithLine(err)
 	}
 
 	res, err := r.client.Do(req)
 	if err != nil {
-		// err
+		return false, logger.ErrorWithLine(err)
 	}
 	defer res.Body.Close()
 
 	return res.StatusCode == http.StatusOK, nil
 }
 
+// Update updates the log of the current replica when a decision is made by the leaders
 func (r *Replica) Update(dec domain.Decision) error {
 	if dec.SlotID != len(r.log) {
-		// err
+		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidSlot, dec.SlotID, len(r.log))))
 	}
 
 	r.lock.Lock()
