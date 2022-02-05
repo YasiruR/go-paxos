@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/go-paxos/domain"
+	"github.com/go-paxos/logger"
 	"github.com/go-paxos/roles"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -10,16 +12,18 @@ import (
 	traceableContext "github.com/tryfix/traceable-context"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 )
 
-type Server struct {
-	replica *roles.Replica
+type server struct {
 	leader  *roles.Leader
+	replica *roles.Replica
 	logger  log.Logger
 }
 
-func Init() {
-	s := &Server{}
+func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Replica) {
+	s := &server{leader: leader, replica: replica, logger: logger.Log}
+
 	r := mux.NewRouter()
 	r.HandleFunc(domain.RequestReplicaEndpoint, s.handleClientRequest).Methods(http.MethodPost)
 	r.HandleFunc(domain.UpdateReplicaEndpoint, s.handleUpdateReplica).Methods(http.MethodPost)
@@ -27,13 +31,16 @@ func Init() {
 	r.HandleFunc(domain.RequestLeaderEndpoint, s.handleReplicaRequest).Methods(http.MethodPost)
 	r.HandleFunc(domain.PrepareEndpoint, s.handlePrepare).Methods(http.MethodPost)
 	r.HandleFunc(domain.AcceptEndpoint, s.handleAccept).Methods(http.MethodPost)
+
+	s.logger.InfoContext(ctx, `initializing http server`)
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), r))
 }
 
 // todo change errors
 
 // handleClientRequest handles the client request with a string value in raw body and passes the decoded value to replica
 // to initiate the procedure.
-func (s *Server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -52,7 +59,7 @@ func (s *Server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateReplica updates the state of the current node whenever a consensus is reached and sent by leaders
-func (s *Server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -79,7 +86,7 @@ func (s *Server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReplicaRequest handles the request by a replica and forwards to the leader layer to proceed with a proposal
-func (s *Server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -112,7 +119,7 @@ func (s *Server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePrepare handles the prepare request sent by the proposer to an acceptor with initialization of a proposal
-func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
+func (s *server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -144,7 +151,7 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAccept handles accept requests by the proposer to confirm a proposal
-func (s *Server) handleAccept(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleAccept(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {

@@ -9,12 +9,7 @@ import (
 	"github.com/go-paxos/logger"
 	"net/http"
 	"sync"
-)
-
-// todo add all errs to one file
-const (
-	errNoLeader    = `no leader found in the replica`
-	errInvalidSlot = `received a decision for an invalid slot`
+	"time"
 )
 
 type Replica struct {
@@ -25,9 +20,13 @@ type Replica struct {
 	lock     *sync.Mutex
 }
 
-func NewReplica() *Replica {
-	// add leaders
-	return &Replica{}
+func NewReplica(hostname string, leaders []string) *Replica {
+	return &Replica{
+		hostname: hostname,
+		leaders:  leaders,
+		client:   &http.Client{Timeout: time.Duration(domain.Config.ReplicaTimeout) * time.Second},
+		lock:     &sync.Mutex{},
+	}
 }
 
 // HandleRequest builds a request from the client value and forwards the request received to a leader

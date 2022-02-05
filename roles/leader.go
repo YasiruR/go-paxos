@@ -2,6 +2,8 @@ package roles
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,20 +11,11 @@ import (
 	"github.com/go-paxos/logger"
 	"github.com/tryfix/log"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
-)
-
-const (
-	typePrepare = `prepare`
-	typeAccept  = `accept`
-
-	errInvalidSlotLeader = `leader received a request for an invalid slot`
-	errBroadcast         = `sending decision to replicas failed`
-	errRequestAcceptor   = `received non-2xx code for acceptor response`
-	errInvalidProposal   = `acceptor received an older proposal`
 )
 
 type state struct {
@@ -36,18 +29,36 @@ type Leader struct {
 	lastSlot int
 	promised state
 	accepted state
+	leaders  []string // excluding the current node
 	replicas []string
-	leaders  []string // except this one
 	client   *http.Client
 	lock     *sync.Mutex
 	logger   log.Logger
 }
 
-func NewLeader() *Leader {
+func NewLeader(hostname string, leaders, replicas []string) *Leader {
 	return &Leader{
+		id:       id(hostname),
 		lastSlot: -1,
+		promised: state{},
+		accepted: state{},
+		leaders:  leaders,
+		replicas: replicas,
+		client:   &http.Client{Timeout: time.Duration(domain.Config.LeaderTimeout) * time.Second},
+		logger:   logger.Log,
 	}
 }
+
+func id(hostname string) int {
+	sum := sha256.Sum256([]byte(hostname))
+	hexVal := hex.EncodeToString(sum[:])
+	n := new(big.Int)
+	n.SetString(hexVal, 16)
+
+	return int(n.Uint64() % idLimit)
+}
+
+/* Proposer functions */
 
 // Propose creates the proposal when a replica has requested this leader and carries out the consensus algorithm
 func (l *Leader) Propose(req domain.Request) (ok bool, err error) {
@@ -226,6 +237,8 @@ func (l *Leader) validateAccepts(resList []domain.Acceptance) (accepted, rejecte
 
 	return accepted, rejected
 }
+
+/* Acceptor functions */
 
 // HandlePrepare handles prepare message requested by a proposer to check if this acceptor has already promised or accepted a proposal
 func (l *Leader) HandlePrepare(prop domain.Proposal) (domain.Acceptance, error) {
