@@ -51,17 +51,9 @@ func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 			return nil
 		}
 
-		r.lock.Lock()
-		if req.SlotID == len(r.log) {
-			req.SlotID++
-		} else {
-			req.SlotID = len(r.log)
-		}
-		r.lock.Unlock()
-		break
+		time.Sleep(1000 * time.Millisecond)
+		req.SlotID++
 	}
-
-	return nil
 }
 
 // buildRequest builds the request from the client value
@@ -100,9 +92,13 @@ func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, ok bool,
 		return domain.Decision{}, false, logger.ErrorWithLine(err)
 	}
 
+	if res.StatusCode != http.StatusOK {
+		return domain.Decision{}, false, nil
+	}
+
 	err = json.Unmarshal(resData, &dec)
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(err)
+		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s for value %s (res: %s)`, err.Error(), replicaReq.Val, string(resData))))
 	}
 
 	return dec, res.StatusCode == http.StatusOK, nil

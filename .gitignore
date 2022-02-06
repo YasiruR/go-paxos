@@ -2,3 +2,4 @@ vendor
 .idea
 run
 ./go.sum
+./scripts/tester

@@ -113,7 +113,7 @@ func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ok {
-		s.logger.DebugContext(ctx, `proposed value was not chosen`)
+		s.logger.DebugContext(ctx, `proposed value was not chosen`, req.Val)
 		w.WriteHeader(http.StatusNotAcceptable)
 		return
 	}

@@ -66,7 +66,7 @@ func id(hostname string) int {
 func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.Decision, ok bool, err error) {
 	// return if the requested slot id is not for the next slot
 	if l.lastSlot+1 != req.SlotID {
-		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, requested: %d)`, errInvalidSlotLeader, l.lastSlot+1, req.SlotID)))
+		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, requested: %d, val: %s)`, errInvalidSlotLeader, l.lastSlot+1, req.SlotID, req.Val)))
 	}
 
 	prop, err := l.newProposal(req.SlotID, req.Val)
