@@ -1,0 +1,8 @@
+# service configs
+leader_http_timeout: 10
+replica_http_timeout: 10
+
+# logger configs
+colors_enabled: true
+log_level: "TRACE"
+file_path: true

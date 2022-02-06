@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/go-paxos/domain"
-	"github.com/go-paxos/logger"
 	"github.com/go-paxos/roles"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -21,8 +20,8 @@ type server struct {
 	logger  log.Logger
 }
 
-func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Replica) {
-	s := &server{leader: leader, replica: replica, logger: logger.Log}
+func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Replica, logger log.Logger) {
+	s := &server{leader: leader, replica: replica, logger: logger}
 
 	r := mux.NewRouter()
 	r.HandleFunc(domain.RequestReplicaEndpoint, s.handleClientRequest).Methods(http.MethodPost)
@@ -48,8 +47,9 @@ func (s *server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	s.logger.TraceContext(ctx, `client request received`, string(data))
 
-	err = s.replica.HandleRequest(string(data))
+	err = s.replica.HandleRequest(ctx, string(data))
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -61,6 +61,7 @@ func (s *server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
 // handleUpdateReplica updates the state of the current node whenever a consensus is reached and sent by leaders
 func (s *server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
+	s.logger.TraceContext(ctx, `request for updating replica state is received`)
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
@@ -76,7 +77,7 @@ func (s *server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.replica.Update(dec)
+	err = s.replica.Update(ctx, dec)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -88,6 +89,7 @@ func (s *server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 // handleReplicaRequest handles the request by a replica and forwards to the leader layer to proceed with a proposal
 func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
+	s.logger.TraceContext(ctx, `replica request for the leader is received`)
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
@@ -103,7 +105,7 @@ func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok, err := s.leader.Propose(req)
+	dec, ok, err := s.leader.Propose(ctx, req)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -115,12 +117,19 @@ func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotAcceptable)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(&dec)
+	if err != nil {
+		s.logger.ErrorContext(ctx, err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 // handlePrepare handles the prepare request sent by the proposer to an acceptor with initialization of a proposal
 func (s *server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
+	s.logger.TraceContext(ctx, `prepare request received by the proposer`)
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
@@ -153,6 +162,7 @@ func (s *server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 // handleAccept handles accept requests by the proposer to confirm a proposal
 func (s *server) handleAccept(w http.ResponseWriter, r *http.Request) {
 	ctx := traceableContext.WithUUID(uuid.New())
+	s.logger.TraceContext(ctx, `accept request received by the proposer`)
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)

@@ -8,16 +8,15 @@ import (
 	"runtime"
 )
 
-var Log log.Logger
-
-func Init(ctx context.Context) {
-	Log = log.Constructor.Log(
+func Init(ctx context.Context) log.Logger {
+	logger := log.Constructor.Log(
 		log.WithColors(config.ColorsEnabled),
 		log.WithLevel(log.Level(config.LogLevel)),
 		log.WithFilePath(config.FilePath),
 	)
 
-	Log.InfoContext(ctx, `logger initialized`)
+	logger.InfoContext(ctx, `logger initialized`)
+	return logger
 }
 
 func ErrorWithLine(err error) error {

@@ -2,6 +2,7 @@ package roles
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,7 +37,7 @@ type Leader struct {
 	logger   log.Logger
 }
 
-func NewLeader(hostname string, leaders, replicas []string) *Leader {
+func NewLeader(hostname string, leaders, replicas []string, logger log.Logger) *Leader {
 	return &Leader{
 		id:       id(hostname),
 		lastSlot: -1,
@@ -45,7 +46,8 @@ func NewLeader(hostname string, leaders, replicas []string) *Leader {
 		leaders:  leaders,
 		replicas: replicas,
 		client:   &http.Client{Timeout: time.Duration(domain.Config.LeaderTimeout) * time.Second},
-		logger:   logger.Log,
+		lock:     &sync.Mutex{},
+		logger:   logger,
 	}
 }
 
@@ -61,20 +63,20 @@ func id(hostname string) int {
 /* Proposer functions */
 
 // Propose creates the proposal when a replica has requested this leader and carries out the consensus algorithm
-func (l *Leader) Propose(req domain.Request) (ok bool, err error) {
+func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.Decision, ok bool, err error) {
 	// return if the requested slot id is not for the next slot
 	if l.lastSlot+1 != req.SlotID {
-		return false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, requested: %d)`, errInvalidSlotLeader, l.lastSlot+1, req.SlotID)))
+		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, requested: %d)`, errInvalidSlotLeader, l.lastSlot+1, req.SlotID)))
 	}
 
 	prop, err := l.newProposal(req.SlotID, req.Val)
 	if err != nil {
-		return false, logger.ErrorWithLine(err)
+		return domain.Decision{}, false, logger.ErrorWithLine(err)
 	}
 
 	resList, err := l.send(typePrepare, prop)
 	if err != nil {
-		return false, logger.ErrorWithLine(err)
+		return domain.Decision{}, false, logger.ErrorWithLine(err)
 	}
 
 	accepted, rejected, valid := l.validatePromises(resList)
@@ -82,30 +84,30 @@ func (l *Leader) Propose(req domain.Request) (ok bool, err error) {
 		if accepted > rejected {
 			resList, err = l.send(typeAccept, prop)
 			if err != nil {
-				return false, logger.ErrorWithLine(err)
+				return domain.Decision{}, false, logger.ErrorWithLine(err)
 			}
 
 			accepted, rejected = l.validateAccepts(resList)
 			if accepted > rejected {
-				var dec domain.Decision
+				l.logger.DebugContext(ctx, fmt.Sprintf(`requested value %s was proposed and chosen for slot %d`, req.Val, req.SlotID))
 				dec.SlotID = req.SlotID
 				dec.Val = req.Val
 				l.lastSlot++
 				err = l.broadcastDecision(dec, req.Replica)
 				if err != nil {
-					return false, logger.ErrorWithLine(err)
+					return domain.Decision{}, false, logger.ErrorWithLine(err)
 				}
-				return true, nil
+				return dec, true, nil
 			}
 		}
 	}
 
-	return false, nil
+	return domain.Decision{}, false, nil
 }
 
 // newProposal creates a proposal with an id in the format of `timestamp`+`leader_id`
 func (l *Leader) newProposal(slotID int, val string) (domain.Proposal, error) {
-	ts := time.Now().Second()
+	ts := time.Now().Unix()
 	pId, err := strconv.Atoi(fmt.Sprintf(`%d%d`, ts, l.id))
 	if err != nil {
 		return domain.Proposal{}, logger.ErrorWithLine(err)
@@ -295,7 +297,7 @@ func (l *Leader) HandleAccept(prop domain.Proposal) (domain.Acceptance, error) {
 	defer l.lock.Unlock()
 
 	// rejects if already promised to a proposal with a higher id for the same slot
-	if l.promised.slot == prop.SlotID && l.promised.id >= prop.ID {
+	if l.promised.slot == prop.SlotID && l.promised.id > prop.ID {
 		res.Accepted = false
 		return res, nil
 	}
