@@ -38,8 +38,12 @@ func NewReplica(hostname string, leaders []string, logger log.Logger) *Replica {
 func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 	req := r.buildRequest(val)
 	for {
-		dec, ok, err := r.send(req)
+		dec, errRes, ok, err := r.send(req)
 		if err != nil {
+			if err.Error() == errFutureSlot {
+				req.SlotID = errRes.LastSlot + 1
+				continue
+			}
 			return logger.ErrorWithLine(err)
 		}
 
@@ -51,7 +55,6 @@ func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 			return nil
 		}
 
-		time.Sleep(1000 * time.Millisecond)
 		req.SlotID++
 	}
 }
@@ -66,48 +69,57 @@ func (r *Replica) buildRequest(val string) domain.Request {
 }
 
 // Sends the request to first leader found in the leader list. If the list is empty, an error is returned with success as false
-func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, ok bool, err error) {
+func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, errRes domain.ErrorRes, ok bool, err error) {
 	if len(r.leaders) == 0 {
-		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(errNoLeader))
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(errors.New(errNoLeader))
 	}
 
 	data, err := json.Marshal(replicaReq)
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(err)
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, `http://`+r.leaders[0]+domain.RequestLeaderEndpoint, bytes.NewBuffer(data))
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(err)
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
 	}
 
 	res, err := r.client.Do(req)
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(err)
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
 	}
 	defer res.Body.Close()
 
 	resData, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(err)
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
+	}
+
+	// too early status implies that replica requested for a future slot
+	if res.StatusCode == http.StatusTooEarly {
+		err = json.Unmarshal(resData, &errRes)
+		if err != nil {
+			return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
+		}
+		return domain.Decision{}, errRes, false, errors.New(errFutureSlot)
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return domain.Decision{}, false, nil
+		return domain.Decision{}, domain.ErrorRes{}, false, nil
 	}
 
 	err = json.Unmarshal(resData, &dec)
 	if err != nil {
-		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s for value %s (res: %s)`, err.Error(), replicaReq.Val, string(resData))))
+		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s for value %s (res: %s)`, err.Error(), replicaReq.Val, string(resData))))
 	}
 
-	return dec, res.StatusCode == http.StatusOK, nil
+	return dec, domain.ErrorRes{}, res.StatusCode == http.StatusOK, nil
 }
 
 // Update updates the log of the current replica when a decision is made by the leaders
 func (r *Replica) Update(ctx context.Context, dec domain.Decision) error {
 	if dec.SlotID != len(r.log) {
-		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidSlot, dec.SlotID, len(r.log))))
+		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidDecision, dec.SlotID, len(r.log))))
 	}
 
 	r.lock.Lock()

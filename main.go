@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-paxos/domain"
 	"github.com/go-paxos/logger"
 	"github.com/go-paxos/roles"
@@ -19,6 +20,16 @@ const (
 )
 
 func main() {
+	fmt.Println()
+	fmt.Printf(` ██████╗  ██████╗       ██████╗  █████╗ ██╗  ██╗ ██████╗ ███████╗
+██╔════╝ ██╔═══██╗      ██╔══██╗██╔══██╗╚██╗██╔╝██╔═══██╗██╔════╝
+██║  ███╗██║   ██║█████╗██████╔╝███████║ ╚███╔╝ ██║   ██║███████╗
+██║   ██║██║   ██║╚════╝██╔═══╝ ██╔══██║ ██╔██╗ ██║   ██║╚════██║
+╚██████╔╝╚██████╔╝      ██║     ██║  ██║██╔╝ ██╗╚██████╔╝███████║
+ ╚═════╝  ╚═════╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+                                                                 `)
+	fmt.Println()
+
 	args := os.Args
 	if len(args) != 5 {
 		log.Fatalln(`command should be in the form of ./<program> <replica or leader> <host:port> <list of leaders> <list of replicas \n

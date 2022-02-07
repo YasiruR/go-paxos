@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	httpClient = &http.Client{Timeout: 30 * time.Second}
+	httpClient = &http.Client{Timeout: 120 * time.Second}
 )
 
 func main() {
@@ -57,10 +57,11 @@ func hosts(arg string) []string {
 
 func start(id int, countAddr *uint64, numRequests int, replicas []string, wg *sync.WaitGroup) {
 	for i := 0; i < numRequests; i++ {
-		// randomly selecting a replica to send with a random value
-		//replica := replicas[rand.Intn(len(replicas))]
 		replica := replicas[id%len(replicas)]
 		val := strconv.Itoa(rand.Intn(1000))
+
+		fmt.Printf(`val: %s client: %d replica: %d`, val, id, id%len(replicas))
+		fmt.Println()
 
 		res, err := httpClient.Post(`http://`+replica+`/replica/request`, `text/plain`, bytes.NewBuffer([]byte(val)))
 		if err != nil {
@@ -74,8 +75,6 @@ func start(id int, countAddr *uint64, numRequests int, replicas []string, wg *sy
 			continue
 		}
 		res.Body.Close()
-		fmt.Printf(`val: %s client: %d replica: %d`, val, id, id%len(replicas))
-		fmt.Println()
 		atomic.AddUint64(countAddr, 1)
 	}
 	wg.Done()

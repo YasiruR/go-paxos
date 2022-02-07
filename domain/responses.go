@@ -20,3 +20,8 @@ type Acceptance struct {
 
 	Accepted bool `json:"accepted"`
 }
+
+type ErrorRes struct {
+	RequestedSlot int `json:"requested_slot"`
+	LastSlot      int `json:"last_slot"`
+}

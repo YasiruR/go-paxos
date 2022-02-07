@@ -1,6 +1,6 @@
 # service configs
-leader_http_timeout: 10
-replica_http_timeout: 10
+leader_http_timeout: 10   # seconds
+replica_http_timeout: 30  # seconds
 
 # logger configs
 colors_enabled: true

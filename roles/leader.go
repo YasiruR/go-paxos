@@ -19,6 +19,15 @@ import (
 	"time"
 )
 
+type SlotStatus int
+
+const (
+	ValidSlot = iota + 1
+	FutureSlot
+	InvalidSlot
+)
+
+// internal state structure of last promised and accepted proposals
 type state struct {
 	id   int
 	slot int
@@ -33,7 +42,7 @@ type Leader struct {
 	leaders  []string // excluding the current node
 	replicas []string
 	client   *http.Client
-	lock     *sync.Mutex
+	lock     *sync.RWMutex
 	logger   log.Logger
 }
 
@@ -46,7 +55,7 @@ func NewLeader(hostname string, leaders, replicas []string, logger log.Logger) *
 		leaders:  leaders,
 		replicas: replicas,
 		client:   &http.Client{Timeout: time.Duration(domain.Config.LeaderTimeout) * time.Second},
-		lock:     &sync.Mutex{},
+		lock:     &sync.RWMutex{},
 		logger:   logger,
 	}
 }
@@ -62,19 +71,29 @@ func id(hostname string) int {
 
 /* Proposer functions */
 
-// Propose creates the proposal when a replica has requested this leader and carries out the consensus algorithm
-func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.Decision, ok bool, err error) {
-	// return if the requested slot id is not for the next slot
-	if l.lastSlot+1 != req.SlotID {
-		return domain.Decision{}, false, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, requested: %d, val: %s)`, errInvalidSlotLeader, l.lastSlot+1, req.SlotID, req.Val)))
+// ValidateSlot validates the requested slot to decide whether it is old, upcoming or valid
+func (l *Leader) ValidateSlot(reqSlot int) (lastSlot int, status SlotStatus) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	if reqSlot > l.lastSlot+1 {
+		return l.lastSlot, FutureSlot
 	}
 
+	if l.lastSlot+1 != reqSlot {
+		return l.lastSlot, InvalidSlot
+	}
+
+	return l.lastSlot, ValidSlot
+}
+
+// Propose creates the proposal when a replica has requested this leader and carries out the consensus algorithm
+func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.Decision, ok bool, err error) {
 	prop, err := l.newProposal(req.SlotID, req.Val)
 	if err != nil {
 		return domain.Decision{}, false, logger.ErrorWithLine(err)
 	}
 
-	resList, err := l.send(typePrepare, prop)
+	resList, err := l.send(ctx, typePrepare, prop)
 	if err != nil {
 		return domain.Decision{}, false, logger.ErrorWithLine(err)
 	}
@@ -82,7 +101,7 @@ func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.De
 	accepted, rejected, valid := l.validatePromises(resList)
 	if valid {
 		if accepted > rejected {
-			resList, err = l.send(typeAccept, prop)
+			resList, err = l.send(ctx, typeAccept, prop)
 			if err != nil {
 				return domain.Decision{}, false, logger.ErrorWithLine(err)
 			}
@@ -92,7 +111,11 @@ func (l *Leader) Propose(ctx context.Context, req domain.Request) (dec domain.De
 				l.logger.DebugContext(ctx, fmt.Sprintf(`requested value %s was proposed and chosen for slot %d`, req.Val, req.SlotID))
 				dec.SlotID = req.SlotID
 				dec.Val = req.Val
+
+				l.lock.Lock()
 				l.lastSlot++
+				l.lock.Unlock()
+
 				err = l.broadcastDecision(dec, req.Replica)
 				if err != nil {
 					return domain.Decision{}, false, logger.ErrorWithLine(err)
@@ -123,34 +146,52 @@ func (l *Leader) broadcastDecision(dec domain.Decision, requester string) error 
 		return logger.ErrorWithLine(err)
 	}
 
+	wg := &sync.WaitGroup{}
+	errChan := make(chan error, len(l.replicas))
+
 	for _, replica := range l.replicas {
 		if replica == requester {
 			continue
 		}
 
-		// todo can do in parallel
-		req, err := http.NewRequest(http.MethodPost, `http://`+replica+domain.UpdateReplicaEndpoint, bytes.NewBuffer(data))
-		if err != nil {
-			return logger.ErrorWithLine(err)
-		}
+		wg.Add(1)
+		go func(replica string, wg *sync.WaitGroup, errChan chan error) {
+			defer wg.Done()
+			req, err := http.NewRequest(http.MethodPost, `http://`+replica+domain.UpdateReplicaEndpoint, bytes.NewBuffer(data))
+			if err != nil {
+				errChan <- logger.ErrorWithLine(err)
+				return
+			}
 
-		res, err := l.client.Do(req)
-		if err != nil {
-			return logger.ErrorWithLine(err)
-		}
+			res, err := l.client.Do(req)
+			if err != nil {
+				errChan <- logger.ErrorWithLine(err)
+				return
+			}
 
-		if res.StatusCode != http.StatusOK {
+			if res.StatusCode != http.StatusOK {
+				res.Body.Close()
+				errChan <- logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (status: %d)`, errBroadcast, res.StatusCode)))
+				return
+			}
+			errChan <- nil
 			res.Body.Close()
-			return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (status: %d)`, errBroadcast, res.StatusCode)))
+		}(replica, wg, errChan)
+	}
+
+	wg.Wait()
+	for i := 0; i < len(l.replicas)-1; i++ {
+		err = <-errChan
+		if err != nil {
+			return err
 		}
-		res.Body.Close()
 	}
 
 	return nil
 }
 
 // Sends out the proposal to all acceptors in both phases prepare and accept, excluding the current leader as it does not exist in leader list
-func (l *Leader) send(typ string, prop domain.Proposal) ([]domain.Acceptance, error) {
+func (l *Leader) send(ctx context.Context, typ string, prop domain.Proposal) ([]domain.Acceptance, error) {
 	data, err := json.Marshal(prop)
 	if err != nil {
 		return nil, logger.ErrorWithLine(err)
@@ -164,37 +205,59 @@ func (l *Leader) send(typ string, prop domain.Proposal) ([]domain.Acceptance, er
 	}
 
 	var resList []domain.Acceptance
+	resChan := make(chan domain.Acceptance)
+	errChan := make(chan error)
+	wg := &sync.WaitGroup{}
 	for _, acceptor := range l.leaders {
-		// todo do this in parallel
-		req, err := http.NewRequest(http.MethodPost, `http://`+acceptor+endpoint, bytes.NewBuffer(data))
-		if err != nil {
-			return nil, logger.ErrorWithLine(err)
-		}
+		wg.Add(1)
+		go func(acceptor string, resChan chan domain.Acceptance, wg *sync.WaitGroup, errChan chan error) {
+			req, err := http.NewRequest(http.MethodPost, `http://`+acceptor+endpoint, bytes.NewBuffer(data))
+			if err != nil {
+				errChan <- errors.New(fmt.Sprintf(`%s for acceptor: %s`, err.Error(), acceptor))
+				return
+			}
 
-		// todo majority is enough
-		res, err := l.client.Do(req)
-		if err != nil {
-			return nil, logger.ErrorWithLine(err)
-		}
+			res, err := l.client.Do(req)
+			if err != nil {
+				errChan <- errors.New(fmt.Sprintf(`%s for acceptor: %s`, err.Error(), acceptor))
+				return
+			}
 
-		if res.StatusCode != http.StatusOK {
+			if res.StatusCode != http.StatusOK {
+				res.Body.Close()
+				errChan <- errors.New(fmt.Sprintf(`%s (type: %s, status: %d) for acceptor: %s`, errRequestAcceptor, typ, res.StatusCode, acceptor))
+				return
+			}
+
+			resData, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				res.Body.Close()
+				errChan <- errors.New(fmt.Sprintf(`%s for acceptor: %s`, err.Error(), acceptor))
+				return
+			}
 			res.Body.Close()
-			return nil, logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (type: %s, status: %d)`, errRequestAcceptor, typ, res.StatusCode)))
-		}
 
-		resData, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			res.Body.Close()
-			return nil, logger.ErrorWithLine(err)
-		}
-		res.Body.Close()
+			var response domain.Acceptance
+			err = json.Unmarshal(resData, &response)
+			if err != nil {
+				errChan <- errors.New(fmt.Sprintf(`%s for acceptor: %s`, err.Error(), acceptor))
+				return
+			}
+			wg.Done()
+			resChan <- response
+		}(acceptor, resChan, wg, errChan)
+	}
 
-		var response domain.Acceptance
-		err = json.Unmarshal(resData, &response)
-		if err != nil {
-			return nil, logger.ErrorWithLine(err)
+	wg.Wait()
+	for i := 0; i < len(l.leaders); i++ {
+		select {
+		case res := <-resChan:
+			resList = append(resList, res)
+		case err = <-errChan:
+			l.logger.ErrorContext(ctx, err)
+		default:
+			continue
 		}
-		resList = append(resList, response)
 	}
 
 	return resList, nil
