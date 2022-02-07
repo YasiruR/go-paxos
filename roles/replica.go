@@ -55,7 +55,6 @@ func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 			return nil
 		}
 
-		time.Sleep(1000 * time.Millisecond)
 		req.SlotID++
 	}
 }

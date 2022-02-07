@@ -145,27 +145,45 @@ func (l *Leader) broadcastDecision(dec domain.Decision, requester string) error 
 		return logger.ErrorWithLine(err)
 	}
 
+	wg := &sync.WaitGroup{}
+	errChan := make(chan error, len(l.replicas))
+
 	for _, replica := range l.replicas {
 		if replica == requester {
 			continue
 		}
 
-		// todo can do in parallel
-		req, err := http.NewRequest(http.MethodPost, `http://`+replica+domain.UpdateReplicaEndpoint, bytes.NewBuffer(data))
-		if err != nil {
-			return logger.ErrorWithLine(err)
-		}
+		wg.Add(1)
+		go func(replica string, wg *sync.WaitGroup, errChan chan error) {
+			defer wg.Done()
+			req, err := http.NewRequest(http.MethodPost, `http://`+replica+domain.UpdateReplicaEndpoint, bytes.NewBuffer(data))
+			if err != nil {
+				errChan <- logger.ErrorWithLine(err)
+				return
+			}
 
-		res, err := l.client.Do(req)
-		if err != nil {
-			return logger.ErrorWithLine(err)
-		}
+			res, err := l.client.Do(req)
+			if err != nil {
+				errChan <- logger.ErrorWithLine(err)
+				return
+			}
 
-		if res.StatusCode != http.StatusOK {
+			if res.StatusCode != http.StatusOK {
+				res.Body.Close()
+				errChan <- logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (status: %d)`, errBroadcast, res.StatusCode)))
+				return
+			}
+			errChan <- nil
 			res.Body.Close()
-			return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (status: %d)`, errBroadcast, res.StatusCode)))
+		}(replica, wg, errChan)
+	}
+
+	wg.Wait()
+	for i := 0; i < len(l.replicas)-1; i++ {
+		err = <-errChan
+		if err != nil {
+			return err
 		}
-		res.Body.Close()
 	}
 
 	return nil
