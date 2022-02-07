@@ -36,8 +36,6 @@ func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Re
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), r))
 }
 
-// todo change errors
-
 // handleClientRequest handles the client request with a string value in raw body and passes the decoded value to replica
 // to initiate the procedure.
 func (s *server) handleClientRequest(w http.ResponseWriter, r *http.Request) {
