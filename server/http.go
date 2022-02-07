@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/go-paxos/domain"
 	"github.com/go-paxos/roles"
 	"github.com/google/uuid"
@@ -102,6 +103,26 @@ func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	lastSlot, status := s.leader.ValidateSlot(req.SlotID)
+	var errRes domain.ErrorRes
+	switch status {
+	case roles.FutureSlot:
+		w.WriteHeader(http.StatusTooEarly)
+		errRes.RequestedSlot = req.SlotID
+		errRes.LastSlot = lastSlot
+		s.logger.TraceContext(ctx, fmt.Sprintf(`received a future slot (requested: %d, last slot: %d, val: %s)`, req.SlotID, lastSlot, req.Val))
+		err = json.NewEncoder(w).Encode(&errRes)
+		if err != nil {
+			s.logger.ErrorContext(ctx, err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	case roles.InvalidSlot:
+		s.logger.TraceContext(ctx, fmt.Sprintf(`received an older slot (requested: %d, last slot: %d, val: %s)`, req.SlotID, lastSlot, req.Val))
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
