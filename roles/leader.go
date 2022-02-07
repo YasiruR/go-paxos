@@ -71,6 +71,7 @@ func id(hostname string) int {
 
 /* Proposer functions */
 
+// ValidateSlot validates the requested slot to decide whether it is old, upcoming or valid
 func (l *Leader) ValidateSlot(reqSlot int) (lastSlot int, status SlotStatus) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()

@@ -10,6 +10,6 @@ const (
 	errRequestAcceptor = `received non-2xx code for acceptor response`
 	errInvalidProposal = `acceptor received an older proposal`
 
-	errNoLeader    = `no leader found in the replica`
-	errInvalidSlot = `received a decision for an invalid slot`
+	errNoLeader        = `no leader found in the replica`
+	errInvalidDecision = `received a decision for an invalid slot`
 )

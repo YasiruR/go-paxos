@@ -81,7 +81,7 @@ func (s *server) handleUpdateReplica(w http.ResponseWriter, r *http.Request) {
 	err = s.replica.Update(ctx, dec)
 	if err != nil {
 		s.logger.ErrorContext(ctx, err)
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -114,6 +114,7 @@ func (s *server) handleReplicaRequest(w http.ResponseWriter, r *http.Request) {
 		errRes.RequestedSlot = req.SlotID
 		errRes.LastSlot = lastSlot
 		s.logger.TraceContext(ctx, fmt.Sprintf(`received a future slot (requested: %d, last slot: %d, val: %s)`, req.SlotID, lastSlot, req.Val))
+
 		err = json.NewEncoder(w).Encode(&errRes)
 		if err != nil {
 			s.logger.ErrorContext(ctx, err)

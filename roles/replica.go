@@ -95,6 +95,7 @@ func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, errRes d
 		return domain.Decision{}, domain.ErrorRes{}, false, logger.ErrorWithLine(err)
 	}
 
+	// too early status implies that replica requested for a future slot
 	if res.StatusCode == http.StatusTooEarly {
 		err = json.Unmarshal(resData, &errRes)
 		if err != nil {
@@ -118,7 +119,7 @@ func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, errRes d
 // Update updates the log of the current replica when a decision is made by the leaders
 func (r *Replica) Update(ctx context.Context, dec domain.Decision) error {
 	if dec.SlotID != len(r.log) {
-		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidSlot, dec.SlotID, len(r.log))))
+		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidDecision, dec.SlotID, len(r.log))))
 	}
 
 	r.lock.Lock()
