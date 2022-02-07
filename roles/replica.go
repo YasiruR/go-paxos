@@ -16,21 +16,23 @@ import (
 )
 
 type Replica struct {
-	hostname string
-	log      []string
-	leaders  []string
-	client   *http.Client
-	lock     *sync.Mutex
-	logger   log.Logger
+	hostname   string
+	log        []string
+	pendingLog map[int]string
+	leaders    []string
+	client     *http.Client
+	lock       *sync.Mutex
+	logger     log.Logger
 }
 
 func NewReplica(hostname string, leaders []string, logger log.Logger) *Replica {
 	return &Replica{
-		hostname: hostname,
-		leaders:  leaders,
-		client:   &http.Client{Timeout: time.Duration(domain.Config.ReplicaTimeout) * time.Second},
-		lock:     &sync.Mutex{},
-		logger:   logger,
+		hostname:   hostname,
+		leaders:    leaders,
+		pendingLog: map[int]string{},
+		client:     &http.Client{Timeout: time.Duration(domain.Config.ReplicaTimeout) * time.Second},
+		lock:       &sync.Mutex{},
+		logger:     logger,
 	}
 }
 
@@ -61,9 +63,23 @@ func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 
 // buildRequest builds the request from the client value
 func (r *Replica) buildRequest(val string) domain.Request {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// check if the pending log has already received the slot value
+	slotId := len(r.log)
+tryPendingLog:
+	pendingVal, ok := r.pendingLog[slotId]
+	if ok {
+		r.log = append(r.log, pendingVal)
+		delete(r.pendingLog, slotId)
+		slotId++
+		goto tryPendingLog
+	}
+
 	return domain.Request{
 		Replica: r.hostname,
-		SlotID:  len(r.log),
+		SlotID:  slotId,
 		Val:     val,
 	}
 }
@@ -118,12 +134,25 @@ func (r *Replica) send(replicaReq domain.Request) (dec domain.Decision, errRes d
 
 // Update updates the log of the current replica when a decision is made by the leaders
 func (r *Replica) Update(ctx context.Context, dec domain.Decision) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	// if the decision is for a future slot, stores it in the pending log map
+	if dec.SlotID > len(r.log) {
+		existingVal, ok := r.pendingLog[dec.SlotID]
+		if ok {
+			// if slot has already been updated with a different value
+			if existingVal != dec.Val {
+				return logger.ErrorWithLine(errors.New(fmt.Sprintf(`decided slot has already been updated (existing val: %s, new val: %s)`, existingVal, dec.Val)))
+			}
+		}
+		r.pendingLog[dec.SlotID] = dec.Val
+		return nil
+	}
+
 	if dec.SlotID != len(r.log) {
 		return logger.ErrorWithLine(errors.New(fmt.Sprintf(`%s (slot: %d, log size: %d)`, errInvalidDecision, dec.SlotID, len(r.log))))
 	}
 
-	r.lock.Lock()
-	defer r.lock.Unlock()
 	r.log = append(r.log, dec.Val)
 
 	r.logger.DebugContext(ctx, `replica state updated`, r.log)
