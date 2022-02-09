@@ -32,7 +32,7 @@ func main() {
 
 	args := os.Args
 	if len(args) != 5 {
-		log.Fatalln(`command should be in the form of ./<program> <replica or leader> <host:port> <list of leaders> <list of replicas \n
+		log.Fatalln(`command should be in the form of ./<program> <replica or leader> <host:port> <list of leaders> <list of replicas> \n
 			eg: ./run leader localhost:2022 localhost:2023,localhost:2024 localhost:2025,localhost:2026`)
 	}
 
