@@ -20,24 +20,33 @@ type Replica struct {
 	log        []string
 	pendingLog map[int]string
 	leaders    []string
+	proceed    chan bool
 	client     *http.Client
 	lock       *sync.Mutex
 	logger     log.Logger
 }
 
 func NewReplica(hostname string, leaders []string, logger log.Logger) *Replica {
-	return &Replica{
+	proceedChan := make(chan bool)
+	r := &Replica{
 		hostname:   hostname,
 		leaders:    leaders,
 		pendingLog: map[int]string{},
+		proceed:    proceedChan,
 		client:     &http.Client{Timeout: time.Duration(domain.Config.ReplicaTimeout) * time.Second},
 		lock:       &sync.Mutex{},
 		logger:     logger,
 	}
+	go func() { r.proceed <- true }()
+
+	return r
 }
 
 // HandleRequest builds a request from the client value and forwards the request received to a leader
 func (r *Replica) HandleRequest(ctx context.Context, val string) error {
+	// go routine waits until the pending request by this replica is done (if there's any)
+	<-r.proceed
+
 	req := r.buildRequest(val)
 	for {
 		dec, errRes, ok, err := r.send(req)
@@ -46,10 +55,12 @@ func (r *Replica) HandleRequest(ctx context.Context, val string) error {
 				req.SlotID = errRes.LastSlot + 1
 				continue
 			}
+			go func() { r.proceed <- true }()
 			return logger.ErrorWithLine(err)
 		}
 
 		if ok {
+			go func() { r.proceed <- true }()
 			err = r.Update(ctx, dec)
 			if err != nil {
 				return logger.ErrorWithLine(err)
@@ -154,7 +165,7 @@ func (r *Replica) Update(ctx context.Context, dec domain.Decision) error {
 	}
 
 	r.log = append(r.log, dec.Val)
-
 	r.logger.DebugContext(ctx, `replica state updated`, r.log)
+
 	return nil
 }
