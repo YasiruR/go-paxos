@@ -12,6 +12,7 @@ import (
 	traceableContext "github.com/tryfix/traceable-context"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -210,4 +211,10 @@ func (s *server) handleAccept(w http.ResponseWriter, r *http.Request) {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (s *server) terminate(_ http.ResponseWriter, _ *http.Request) {
+	ctx := traceableContext.WithUUID(uuid.New())
+	s.logger.InfoContext(ctx, `terminate signal received`)
+	os.Exit(0)
 }
