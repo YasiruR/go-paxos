@@ -52,7 +52,7 @@ func main() {
 		leader = roles.NewLeader(args[2], leaders, replicas, logg)
 	}
 
-	server.Init(ctx, p, leader, replica, logg)
+	server.Init(ctx, p, leader, replica, args[2], logg)
 }
 
 func port(host string) int {

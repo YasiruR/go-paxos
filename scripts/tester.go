@@ -37,13 +37,16 @@ func main() {
 	replicas := hosts(args[3])
 	wg := &sync.WaitGroup{}
 	var counter uint64
+	startTime := time.Now().UTC()
 	for i := 0; i < numClients; i++ {
 		wg.Add(1)
 		go start(i, &counter, numRequests, replicas, wg)
 	}
 
 	wg.Wait()
-	log.Printf(`testing is completed (%d out of %d requests)`, counter, numRequests*numClients)
+	fmt.Println()
+	fmt.Printf("testing is completed (%d out of %d requests)\n", counter, numRequests*numClients)
+	fmt.Printf("total elapsed time: %d ms\n", time.Since(startTime).Milliseconds())
 }
 
 func hosts(arg string) []string {
@@ -60,7 +63,7 @@ func start(id int, countAddr *uint64, numRequests int, replicas []string, wg *sy
 		replica := replicas[id%len(replicas)]
 		val := strconv.Itoa(rand.Intn(1000))
 
-		fmt.Printf(`val: %s client: %d replica: %d`, val, id, id%len(replicas))
+		fmt.Printf(`client: %d, replica: %d, value: %s`, id, id%len(replicas), val)
 		fmt.Println()
 
 		res, err := httpClient.Post(`http://`+replica+`/replica/request`, `text/plain`, bytes.NewBuffer([]byte(val)))

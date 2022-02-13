@@ -3,3 +3,4 @@ vendor
 run
 ./go.sum
 ./scripts/tester
+./scripts/*.txt

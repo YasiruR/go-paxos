@@ -12,26 +12,32 @@ import (
 	traceableContext "github.com/tryfix/traceable-context"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 )
 
 type server struct {
-	leader  *roles.Leader
-	replica *roles.Replica
-	logger  log.Logger
+	hostname string
+	leader   *roles.Leader
+	replica  *roles.Replica
+	logger   log.Logger
 }
 
-func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Replica, logger log.Logger) {
-	s := &server{leader: leader, replica: replica, logger: logger}
+func Init(ctx context.Context, port int, leader *roles.Leader, replica *roles.Replica, hostname string, logger log.Logger) {
+	s := &server{leader: leader, replica: replica, hostname: hostname, logger: logger}
 
 	r := mux.NewRouter()
+	// replica endpoints
 	r.HandleFunc(domain.RequestReplicaEndpoint, s.handleClientRequest).Methods(http.MethodPost)
 	r.HandleFunc(domain.UpdateReplicaEndpoint, s.handleUpdateReplica).Methods(http.MethodPost)
 
+	// leader endpoints
 	r.HandleFunc(domain.RequestLeaderEndpoint, s.handleReplicaRequest).Methods(http.MethodPost)
 	r.HandleFunc(domain.PrepareEndpoint, s.handlePrepare).Methods(http.MethodPost)
 	r.HandleFunc(domain.AcceptEndpoint, s.handleAccept).Methods(http.MethodPost)
 
+	// general termination endpoint
+	r.HandleFunc(domain.TermEndpoint, s.terminate).Methods(http.MethodPost)
 	s.logger.InfoContext(ctx, `initializing http server`)
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), r))
 }
@@ -210,4 +216,19 @@ func (s *server) handleAccept(w http.ResponseWriter, r *http.Request) {
 		s.logger.ErrorContext(ctx, err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (s *server) terminate(_ http.ResponseWriter, _ *http.Request) {
+	ctx := traceableContext.WithUUID(uuid.New())
+	if s.leader != nil {
+		s.logger.InfoContext(ctx, fmt.Sprintf(`leader %s is shutting down gracefully`, s.hostname))
+		os.Exit(0)
+	}
+
+	if s.replica != nil {
+		s.logger.InfoContext(ctx, fmt.Sprintf(`replica %s is shutting down gracefully`, s.hostname))
+		os.Exit(0)
+	}
+
+	s.logger.ErrorContext(ctx, `termination failed due to unrecognized role`)
 }
