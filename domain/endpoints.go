@@ -6,4 +6,5 @@ const (
 	RequestLeaderEndpoint  = `/leader/request`
 	PrepareEndpoint        = `/leader/prepare`
 	AcceptEndpoint         = `/leader/accept`
+	TermEndpoint           = `/internal/terminate`
 )

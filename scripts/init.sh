@@ -3,7 +3,19 @@ num_leaders=$1
 num_replicas=$2
 first_port=$3
 
-rm leaders.txt replicas.txt
+if [ ! -f ./leaders.txt ]
+  then
+    :
+  else
+    rm leaders.txt
+fi
+
+if [ ! -f ./replicas.txt ]
+  then
+    :
+  else
+    rm replicas.txt
+fi
 
 # generating ports and leaders
 leaders=()
@@ -18,7 +30,7 @@ done
 
 # generating ports and replicas
 replicas=()
-first_port=$first_port+$num_leaders+1
+first_port=$first_port+$num_leaders
 for i in $(seq 0 $((num_replicas-1)))
 do
   # shellcheck disable=SC2100
@@ -48,6 +60,8 @@ for l in "${leaders[@]}"; do
   fi
 done
 
+cd ..
+
 # starting leaders
 for l in "${leaders[@]}"; do
   index=0
@@ -66,7 +80,8 @@ for l in "${leaders[@]}"; do
       fi
   done
   command+=$replicas_str
-  echo "$command" >> leaders.txt
+#  echo "$command" >> leaders.txt
+  eval "$command &"
 done
 
 # starting replicas
@@ -86,5 +101,6 @@ for r in "${replicas[@]}"; do
         command+=$a
       fi
   done
-  echo "$command" >> replicas.txt
+  eval "$command &"
+#  echo "$command" >> replicas.txt
 done
