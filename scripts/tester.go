@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -44,9 +46,13 @@ func main() {
 	}
 
 	wg.Wait()
+	latency := time.Since(startTime).Milliseconds()
+
+	persist(numClients, numRequests, int(counter), latency)
+
 	fmt.Println()
 	fmt.Printf("testing is completed (%d out of %d requests)\n", counter, numRequests*numClients)
-	fmt.Printf("total elapsed time: %d ms\n", time.Since(startTime).Milliseconds())
+	fmt.Printf("total elapsed time: %d ms\n", latency)
 }
 
 func hosts(arg string) []string {
@@ -81,4 +87,56 @@ func start(id int, countAddr *uint64, numRequests int, replicas []string, wg *sy
 		atomic.AddUint64(countAddr, 1)
 	}
 	wg.Done()
+}
+
+func persist(clients, reqs, success int, latency int64) {
+	fileName := `results.csv`
+	var data [][]string
+	var file *os.File
+	defer file.Close()
+
+	if fileExists(fileName) {
+		file, err := os.Open(fileName)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		r := csv.NewReader(file)
+		for {
+			record, err := r.Read()
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			data = append(data, record)
+		}
+	} else {
+		data = append(data, []string{`clients`, `requests per client`, `total requests`, `success requests`, `latency in ms`})
+	}
+
+	file, err := os.Create(fileName)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	w := csv.NewWriter(file)
+
+	// appending new data item [#clients, #reqs_per_client, #total_reqs #success_reqs, latency_in_ms]
+	data = append(data, []string{strconv.Itoa(clients), strconv.Itoa(reqs), strconv.Itoa(clients * reqs), strconv.Itoa(success), strconv.Itoa(int(latency))})
+
+	err = w.WriteAll(data)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
 }
