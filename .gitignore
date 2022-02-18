@@ -4,3 +4,7 @@ run
 ./go.sum
 ./scripts/tester
 ./scripts/*.txt
+./scripts/upload.sh
+./scripts/*.png
+./scripts/*.csv
+paxos.zip
