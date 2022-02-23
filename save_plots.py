@@ -36,16 +36,51 @@ def save_figures(clients_df, requests_df, prefix):
 
     plt.subplot(121)
     plt.plot(clients_df.index, clients_df['latency in ms'], 'ro')
-    plt.plot(np.unique(clients_df.index), np.poly1d(np.polyfit(clients_df.index, clients_df['latency in ms'], 1))(np.unique(clients_df.index)), 'b--')
+    plt.plot(np.unique(clients_df.index), np.poly1d(np.polyfit(clients_df.index, clients_df['latency in ms'], 2))(np.unique(clients_df.index)), 'b--')
     plt.ylabel('Latency (in ms)')
     plt.xlabel('No. of clients')
 
     plt.subplot(122)
     plt.plot(requests_df.index, requests_df['latency in ms'], 'bo')
-    plt.plot(np.unique(requests_df.index), np.poly1d(np.polyfit(requests_df.index, requests_df['latency in ms'], 1))(np.unique(requests_df.index)), 'r--')
+    plt.plot(np.unique(requests_df.index), np.poly1d(np.polyfit(requests_df.index, requests_df['latency in ms'], 2))(np.unique(requests_df.index)), 'r--')
     plt.ylabel('Latency (in ms)')
     plt.xlabel('Total No. of requests')
     plt.savefig(f'{prefix}_latency.png')
+
+    # Log latency plots
+    plt.figure(figsize=(xsize, ysize))
+    plt.suptitle('Latency (Logarithmic)')
+
+    plt.subplot(121)
+    plt.plot(np.log10(clients_df.index), np.log10(clients_df['latency in ms']), 'ro')
+    plt.plot(np.log10(np.unique(clients_df.index)), np.poly1d(np.polyfit(np.log10(clients_df.index), np.log10(clients_df['latency in ms']), 2))(np.log10(np.unique(clients_df.index))), 'b--')
+    plt.ylabel('Latency')
+    plt.xlabel('No. of clients')
+
+    plt.subplot(122)
+    plt.plot(np.log10(requests_df.index), np.log10(requests_df['latency in ms']), 'bo')
+    plt.plot(np.log10(np.unique(requests_df.index)), np.poly1d(np.polyfit(np.log10(requests_df.index), np.log10(requests_df['latency in ms']), 2))(np.log10(np.unique(requests_df.index))), 'r--')
+    plt.ylabel('Total time taken')
+    plt.xlabel('Total No. of requests')
+    plt.savefig(f'{prefix}_latency_log.png')
+
+    # Log latency plots (only x logged)
+    plt.figure(figsize=(xsize, ysize))
+    plt.suptitle('Latency (Logarithmic)')
+
+    plt.subplot(121)
+    plt.plot(np.log10(clients_df.index), clients_df['latency in ms'], 'ro')
+    plt.plot(np.log10(np.unique(clients_df.index)), np.poly1d(np.polyfit(np.log10(clients_df.index), clients_df['latency in ms'], 2))(np.log10(np.unique(clients_df.index))), 'b--')
+    plt.ylabel('Latency (in ms)')
+    plt.xlabel('No. of clients (log)')
+
+    plt.subplot(122)
+    plt.plot(np.log10(requests_df.index), requests_df['latency in ms'], 'bo')
+    plt.plot(np.log10(np.unique(requests_df.index)), np.poly1d(np.polyfit(np.log10(requests_df.index), requests_df['latency in ms'], 2))(np.log10(np.unique(requests_df.index))), 'r--')
+    plt.ylabel('Latency (in ms)')
+    plt.xlabel('Total No. of requests (log)')
+    plt.savefig(f'{prefix}_latency_log_x_only.png')
+
 
     # Throughput Plots
     plt.figure(figsize=(xsize, ysize))
@@ -53,16 +88,50 @@ def save_figures(clients_df, requests_df, prefix):
 
     plt.subplot(121)
     plt.plot(clients_df.index, clients_df['throughput'], 'ro')
-    plt.plot(np.unique(clients_df.index), np.poly1d(np.polyfit(clients_df.index, clients_df['throughput'], 1))(np.unique(clients_df.index)), 'b--')
+    plt.plot(np.unique(clients_df.index), np.poly1d(np.polyfit(clients_df.index, clients_df['throughput'], 2))(np.unique(clients_df.index)), 'b--')
     plt.ylabel('Throughput (requests per second)')
     plt.xlabel('No. of clients')
 
     plt.subplot(122)
     plt.plot(requests_df.index, requests_df['throughput'], 'bo')
-    plt.plot(np.unique(requests_df.index), np.poly1d(np.polyfit(requests_df.index, requests_df['throughput'], 1))(np.unique(requests_df.index)), 'r--')
+    plt.plot(np.unique(requests_df.index), np.poly1d(np.polyfit(requests_df.index, requests_df['throughput'], 2))(np.unique(requests_df.index)), 'r--')
     plt.ylabel('Throughput (requests per second)')
     plt.xlabel('Total No. of requests')
     plt.savefig(f'{prefix}_throughput.png')
+
+    # Log throughput plots
+    plt.figure(figsize=(xsize, ysize))
+    plt.suptitle('Throughput (Logarithmic)')
+
+    plt.subplot(121)
+    plt.plot(np.log10(clients_df.index), np.log10(clients_df['throughput']), 'ro')
+    plt.plot(np.log10(np.unique(clients_df.index)), np.poly1d(np.polyfit(np.log10(clients_df.index), np.log10(clients_df['throughput']), 2))(np.log10(np.unique(clients_df.index))), 'b--')
+    plt.ylabel('Throughput')
+    plt.xlabel('No. of clients')
+
+    plt.subplot(122)
+    plt.plot(np.log10(requests_df.index), np.log10(requests_df['throughput']), 'bo')
+    plt.plot(np.log10(np.unique(requests_df.index)), np.poly1d(np.polyfit(np.log10(requests_df.index), np.log10(requests_df['throughput']), 2))(np.log10(np.unique(requests_df.index))), 'r--')
+    plt.ylabel('Throughput')
+    plt.xlabel('Total No. of requests')
+    plt.savefig(f'{prefix}_throughput_log.png')
+
+    # Log throughput plots (only x logged)
+    plt.figure(figsize=(xsize, ysize))
+    plt.suptitle('Throughput (Logarithmic)')
+
+    plt.subplot(121)
+    plt.plot(np.log10(clients_df.index), clients_df['throughput'], 'ro')
+    plt.plot(np.log10(np.unique(clients_df.index)), np.poly1d(np.polyfit(np.log10(clients_df.index), clients_df['throughput'], 2))(np.log10(np.unique(clients_df.index))), 'b--')
+    plt.ylabel('Throughput (requests per second)')
+    plt.xlabel('No. of clients (log)')
+
+    plt.subplot(122)
+    plt.plot(np.log10(requests_df.index), requests_df['throughput'], 'bo')
+    plt.plot(np.log10(np.unique(requests_df.index)), np.poly1d(np.polyfit(np.log10(requests_df.index), requests_df['throughput'], 2))(np.log10(np.unique(requests_df.index))), 'r--')
+    plt.ylabel('Throughput (requests per second)')
+    plt.xlabel('Total No. of requests (log)')
+    plt.savefig(f'{prefix}_throughput_log_x_only.png')
 
 
 if __name__ == '__main__':
